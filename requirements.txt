@@ -1,0 +1,12 @@
+groq
+gitpython
+streamlit
+markdown
+reportlab
+flake8
+pytest
+python-dotenv
+readability-lxml
+langgraph
+dotenv
+textstat
