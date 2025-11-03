@@ -10,3 +10,9 @@ readability-lxml
 langgraph
 dotenv
 textstat
+pytest-cov
+pytest-mock
+pytest-html
+coverage
+black
+isort
