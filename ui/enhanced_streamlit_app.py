@@ -19,9 +19,16 @@ class MultiAgentUI:
     """Enhanced UI class for the Multi-Agent Publication System"""
     
     def __init__(self):
-        self.coordinator = build_graph()
-        self.setup_page_config()
-        self.initialize_session_state()
+        self.coordinator = None
+        self._initialized = False
+    
+    def _ensure_initialized(self):
+        """Lazy initialization to avoid Streamlit issues during import"""
+        if not self._initialized:
+            self.coordinator = build_graph()
+            self.setup_page_config()
+            self.initialize_session_state()
+            self._initialized = True
     
     def setup_page_config(self):
         """Configure Streamlit page settings"""
@@ -634,6 +641,9 @@ class MultiAgentUI:
     def run(self):
         """Main application entry point"""
         try:
+            # Ensure initialization is completed
+            self._ensure_initialized()
+            
             # Render UI components
             self.render_header()
             self.render_sidebar()
