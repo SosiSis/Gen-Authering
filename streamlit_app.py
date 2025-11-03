@@ -28,30 +28,6 @@ st.set_page_config(
 def load_enhanced_ui():
     """Attempt to load and run the enhanced UI"""
     try:
-        # Check environment first - try both env vars and Streamlit secrets
-        api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", "")
-        
-        if not api_key:
-            st.error("🔑 GROQ_API_KEY is required")
-            st.markdown("""
-            ### 🔧 Configuration Required
-            
-            **For Streamlit Cloud:**
-            1. Go to your app dashboard
-            2. Click "Settings" → "Secrets"
-            3. Add: `GROQ_API_KEY = "your_api_key_here"`
-            
-            **For Local Development:**
-            Create a `.streamlit/secrets.toml` file with:
-            ```toml
-            GROQ_API_KEY = "your_api_key_here"
-            ```
-            """)
-            return False
-        else:
-            # Set the environment variable for child processes
-            os.environ["GROQ_API_KEY"] = api_key
-            
         # Import the enhanced UI components
         from ui.enhanced_streamlit_app import create_enhanced_app
         from utils.logging_config import setup_logging
@@ -111,7 +87,7 @@ def create_basic_ui():
         repo_url = st.text_input("GitHub Repository URL:")
         
         # Simple pipeline control
-        if st.button("🚀 Generate Publication", key="basic_generate_btn") and repo_url:
+        if st.button("🚀 Generate Publication") and repo_url:
             try:
                 with st.spinner("Processing repository..."):
                     msg = create_mcp_message(
