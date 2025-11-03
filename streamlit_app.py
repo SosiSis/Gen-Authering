@@ -27,6 +27,10 @@ st.set_page_config(
 
 def check_environment():
     """Check for required environment variables"""
+    # Load .env file first
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     # Try Streamlit secrets first, then environment variables
     groq_key = None
     

@@ -6,11 +6,15 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, Any
 import traceback
+from dotenv import load_dotenv
 
 from agents.nodes import create_mcp_message
 from agents.graph_spec import build_graph
 from utils.validation import validate_github_url, ValidationError, SecurityViolationError
 from utils.logging_config import system_logger, setup_logging
+
+# Load environment variables first
+load_dotenv()
 
 # Initialize logging
 setup_logging()
@@ -25,10 +29,62 @@ class MultiAgentUI:
     def _ensure_initialized(self):
         """Lazy initialization to avoid Streamlit issues during import"""
         if not self._initialized:
+            # Check environment first
+            if not self._check_environment():
+                return False
             self.coordinator = build_graph()
             self.setup_page_config()
             self.initialize_session_state()
             self._initialized = True
+        return True
+    
+    def _check_environment(self):
+        """Check for required environment variables"""
+        # Try Streamlit secrets first, then environment variables
+        groq_key = None
+        
+        try:
+            # Try Streamlit secrets
+            if hasattr(st, 'secrets') and 'GROQ_API_KEY' in st.secrets:
+                groq_key = st.secrets['GROQ_API_KEY']
+        except (AttributeError, KeyError):
+            pass
+        
+        # Fall back to environment variable
+        if not groq_key:
+            groq_key = os.getenv("GROQ_API_KEY")
+        
+        if not groq_key or groq_key == "your_groq_api_key_here" or groq_key == "your_actual_groq_api_key_here":
+            st.error("❌ **GROQ_API_KEY not configured!**")
+            st.markdown("""
+            ### 🔧 Setup Instructions:
+            
+            **For Streamlit Cloud:**
+            1. Go to your Streamlit Cloud app settings
+            2. Click on "Secrets" in the Advanced settings
+            3. Add the following:
+            ```toml
+            GROQ_API_KEY = "your_actual_groq_api_key_here"
+            ```
+            
+            **For Local Development:**
+            1. Create a `.env` file in the project root
+            2. Add: `GROQ_API_KEY="your_actual_groq_api_key_here"`
+            
+            **Get a Groq API Key:**
+            1. Visit [console.groq.com](https://console.groq.com)
+            2. Sign up/login and create an API key
+            3. Copy the key and paste it in your environment settings
+            
+            ### 🔍 Current Status:
+            - Streamlit Secrets: {}
+            - Environment Variable: {}
+            """.format(
+                "✅ Available" if hasattr(st, 'secrets') and 'GROQ_API_KEY' in st.secrets else "❌ Not found",
+                "✅ Set" if os.getenv("GROQ_API_KEY") else "❌ Not set"
+            ))
+            return False
+        return True
     
     def setup_page_config(self):
         """Configure Streamlit page settings - Page config already set in main app"""
@@ -635,7 +691,8 @@ class MultiAgentUI:
         """Main application entry point"""
         try:
             # Ensure initialization is completed
-            self._ensure_initialized()
+            if not self._ensure_initialized():
+                return  # Environment check failed, stop here
             
             # Render UI components
             self.render_header()
