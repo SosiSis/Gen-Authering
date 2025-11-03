@@ -66,8 +66,8 @@ graph TB
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/YourUsername/multiagent-publication-system.git
-   cd multiagent-publication-system
+   git clone https://github.com/SosiSis/Gen-Authering
+   cd Gen-Authering
    ```
 
 2. **Set up Python environment:**
@@ -80,7 +80,7 @@ graph TB
 3. **Configure environment:**
    ```bash
    cp .env.example .env
-   # Edit .env with your Groq API key and preferences
+   
    ```
 
 4. **Run the application:**
