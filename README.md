@@ -1,5 +1,6 @@
 # � Multi-Agent Publication Generator - Production System
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://settings-3dghbiairaj6k8jeecmjgx.streamlit.app/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen.svg)](./tests/)
