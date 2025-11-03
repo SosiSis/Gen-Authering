@@ -35,10 +35,14 @@ env*/
 # Environment files / secrets
 .env
 .env.*
+!.env.example
 *.env
 *.secret
 secrets.*
 .envrc
+config/local.py
+config/production.py
+config/secrets.json
 
 # Dependency managers
 poetry.lock
@@ -49,9 +53,15 @@ Pipfile.lock
 *.spec
 *.manifest
 
-# Logs
+# Logs and monitoring
 logs/
 *.log
+*.log.*
+audit.log
+security.log
+performance.log
+health_checks/
+metrics/
 
 # Unit test / coverage
 htmlcov/

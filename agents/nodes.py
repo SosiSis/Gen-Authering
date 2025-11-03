@@ -1,24 +1,138 @@
 # agents/nodes.py
 import os, uuid, time, json
+from typing import Dict, Any, Callable
 from mcp import create_mcp_message, get_conversation_id
-from tools.git_tool import clone_repo, list_files
+from tools.git_tool import clone_repo, list_files, cleanup_repo
 from tools.static_analysis import extract_metrics
 from tools.llm_tool_groq import summarize_text_for_academic, groq_chat
 from tools.pdf_tool import md_to_pdf
+from utils.validation import (
+    validate_mcp_message, validate_github_url, 
+    ValidationError, SecurityViolationError
+)
+from utils.logging_config import system_logger, security_logger, setup_logging
+from utils.resilience import limit_execution_time, with_timeout
+
+# Initialize logging
+setup_logging()
 
 TMP_OUT = os.path.join(os.getcwd(), "output")
 os.makedirs(TMP_OUT, exist_ok=True)
 
-def repo_node(msg, coordinator_send):
-    """Clone repo and emit Analyzer message"""
-    content = msg["content"]
-    repo_url = content.get("repo_url")
-    repo_path = clone_repo(repo_url)
-    files = list_files(repo_path)
-    payload = {"repo_path": repo_path, "files": files}
-    out = create_mcp_message(role="agent", name="AnalyzerNode", content=payload, conversation_id=get_conversation_id(msg))
-    coordinator_send(out)
-    return {"status":"ok", "repo_path": repo_path}
+def repo_node(msg: Dict[str, Any], coordinator_send: Callable) -> Dict[str, Any]:
+    """
+    Clone repository and emit Analyzer message with enhanced validation and logging
+    
+    Args:
+        msg: MCP message containing repo_url
+        coordinator_send: Function to send messages to coordinator
+        
+    Returns:
+        Status dictionary with repo_path or error information
+    """
+    start_time = time.time()
+    conversation_id = get_conversation_id(msg)
+    
+    try:
+        # Validate incoming message
+        validated_msg = validate_mcp_message(msg)
+        content = validated_msg["content"]
+        repo_url = content.get("repo_url")
+        
+        if not repo_url:
+            raise ValidationError("repo_url is required")
+        
+        # Log agent execution start
+        system_logger.logger.info("agent_execution_start", extra={
+            "event_type": "agent_execution_start",
+            "agent_name": "RepoNode",
+            "conversation_id": conversation_id
+        })
+        
+        # Clone repository with validation
+        repo_path = clone_repo(repo_url)
+        
+        # List files with security constraints
+        files = list_files(repo_path, max_files=5000, 
+                          allowed_extensions=['.py', '.js', '.ts', '.md', '.txt', '.json', '.yaml', '.yml'])
+        
+        # Prepare payload for next agent
+        payload = {
+            "repo_path": repo_path, 
+            "files": files,
+            "file_count": len(files),
+            "repo_url": repo_url
+        }
+        
+        # Send to next agent
+        out = create_mcp_message(
+            role="agent", 
+            name="AnalyzerNode", 
+            content=payload, 
+            conversation_id=conversation_id
+        )
+        coordinator_send(out)
+        
+        # Log successful execution
+        execution_time = time.time() - start_time
+        system_logger.log_agent_execution(
+            agent_name="RepoNode",
+            conversation_id=conversation_id,
+            execution_time=execution_time,
+            success=True
+        )
+        
+        return {
+            "status": "ok", 
+            "repo_path": repo_path,
+            "file_count": len(files),
+            "execution_time": execution_time
+        }
+        
+    except (ValidationError, SecurityViolationError) as e:
+        # Log validation/security errors
+        execution_time = time.time() - start_time
+        security_logger.log_validation_error(str(e), str(msg), conversation_id)
+        system_logger.log_agent_execution(
+            agent_name="RepoNode",
+            conversation_id=conversation_id,
+            execution_time=execution_time,
+            success=False,
+            error=str(e)
+        )
+        
+        # Send error to coordinator
+        error_msg = create_mcp_message(
+            role="agent", 
+            name="Coordinator", 
+            content={"error": f"Validation error: {str(e)}", "error_type": "validation"},
+            conversation_id=conversation_id
+        )
+        coordinator_send(error_msg)
+        
+        return {"error": str(e), "error_type": "validation"}
+        
+    except Exception as e:
+        # Log unexpected errors
+        execution_time = time.time() - start_time
+        system_logger.log_agent_execution(
+            agent_name="RepoNode",
+            conversation_id=conversation_id,
+            execution_time=execution_time,
+            success=False,
+            error=str(e)
+        )
+        
+        # Send error to coordinator
+        error_msg = create_mcp_message(
+            role="agent",
+            name="Coordinator",
+            content={"error": f"Repository error: {str(e)}", "error_type": "system"},
+            conversation_id=conversation_id
+        )
+        coordinator_send(error_msg)
+        
+        return {"error": str(e), "error_type": "system"}
 
 def analyzer_node(msg, coordinator_send):
     """Extract metrics and produce a short natural-language summary for WriterNode to expand"""
@@ -93,19 +207,150 @@ def pdf_node(msg, coordinator_send):
     coordinator_send(out)
     return {"status":"pdf_ready", "pdf_path": pdf_out}
 
-def evaluator_node(msg, coordinator_send):
-    """Simple readability evaluator for the draft markdown"""
-    import textstat
-    content = msg["content"]
-    md_path = content.get("md_path")
-    if not md_path:
-        return {"error":"no_md_path"}
+def evaluator_node(msg: Dict[str, Any], coordinator_send: Callable) -> Dict[str, Any]:
+    """
+    Enhanced readability evaluator for markdown documents with validation and logging
+    
+    Args:
+        msg: MCP message containing md_path
+        coordinator_send: Function to send messages to coordinator
+        
+    Returns:
+        Dictionary with evaluation results or error information
+    """
+    start_time = time.time()
+    conversation_id = get_conversation_id(msg)
+    
     try:
-        txt = open(md_path,'r',encoding='utf-8').read()
-        flesch = textstat.flesch_reading_ease(txt)
+        import textstat
+    except ImportError:
+        system_logger.logger.error("textstat_import_error", extra={
+            "event_type": "import_error",
+            "package": "textstat",
+            "agent": "EvaluatorNode"
+        })
+        # Fallback: return basic metrics without textstat
+        return {"error": "textstat package not available", "error_type": "dependency"}
+    
+    try:
+        # Validate incoming message
+        validated_msg = validate_mcp_message(msg)
+        content = validated_msg["content"]
+        md_path = content.get("md_path")
+        
+        if not md_path:
+            raise ValidationError("md_path is required")
+        
+        # Validate file path exists and is readable
+        if not os.path.exists(md_path):
+            raise ValidationError(f"Markdown file not found: {md_path}")
+        
+        # Security check: ensure file is in allowed directory
+        abs_md_path = os.path.abspath(md_path)
+        if not abs_md_path.startswith(os.path.abspath("output")):
+            raise SecurityViolationError("Markdown file outside allowed directory")
+        
+        system_logger.logger.info("evaluator_start", extra={
+            "event_type": "agent_execution_start",
+            "agent_name": "EvaluatorNode",
+            "conversation_id": conversation_id,
+            "md_path": md_path
+        })
+        
+        # Read and analyze the markdown file
+        with open(md_path, 'r', encoding='utf-8') as f:
+            txt = f.read()
+        
+        # Basic validation of content
+        if len(txt.strip()) == 0:
+            raise ValidationError("Markdown file is empty")
+        
+        if len(txt) > 50000:  # Limit file size for security
+            system_logger.logger.warning("large_file_evaluation", extra={
+                "event_type": "security_warning",
+                "file_size": len(txt),
+                "md_path": md_path
+            })
+            txt = txt[:50000]  # Truncate for safety
+        
+        # Calculate readability metrics
+        evaluation_results = {}
+        
+        try:
+            evaluation_results["flesch_reading_ease"] = textstat.flesch_reading_ease(txt)
+            evaluation_results["flesch_kincaid_grade"] = textstat.flesch_kincaid().grade(txt)
+            evaluation_results["automated_readability_index"] = textstat.automated_readability_index(txt)
+            evaluation_results["word_count"] = textstat.lexicon_count(txt)
+            evaluation_results["sentence_count"] = textstat.sentence_count(txt)
+            evaluation_results["avg_sentence_length"] = textstat.avg_sentence_length(txt)
+        except Exception as metric_error:
+            system_logger.logger.warning("textstat_calculation_error", extra={
+                "event_type": "calculation_error",
+                "error": str(metric_error),
+                "md_path": md_path
+            })
+            # Provide basic fallback metrics
+            evaluation_results["word_count"] = len(txt.split())
+            evaluation_results["char_count"] = len(txt)
+            evaluation_results["flesch_reading_ease"] = None
+        
+        # Send results to coordinator
+        out = create_mcp_message(
+            role="agent", 
+            name="Coordinator", 
+            content={
+                "status": "eval_done",
+                **evaluation_results
+            }, 
+            conversation_id=conversation_id
+        )
+        coordinator_send(out)
+        
+        # Log successful execution
+        execution_time = time.time() - start_time
+        system_logger.log_agent_execution(
+            agent_name="EvaluatorNode",
+            conversation_id=conversation_id,
+            execution_time=execution_time,
+            success=True
+        )
+        
+        return {
+            "status": "completed",
+            **evaluation_results,
+            "execution_time": execution_time
+        }
+        
+    except (ValidationError, SecurityViolationError) as e:
+        execution_time = time.time() - start_time
+        security_logger.log_validation_error(str(e), str(msg), conversation_id)
+        system_logger.log_agent_execution(
+            agent_name="EvaluatorNode",
+            conversation_id=conversation_id,
+            execution_time=execution_time,
+            success=False,
+            error=str(e)
+        )
+        
+        return {"error": str(e), "error_type": "validation"}
+        
     except Exception as e:
-        flesch = None
-        print(f"Evaluator error: {e}")
-    out = create_mcp_message(role="agent", name="Coordinator", content={"status":"eval_done","flesch_reading_ease": flesch}, conversation_id=msg["metadata"]["conversation_id"])
-    coordinator_send(out)
-    return {"flesch": flesch}
+        execution_time = time.time() - start_time
+        system_logger.log_agent_execution(
+            agent_name="EvaluatorNode",
+            conversation_id=conversation_id,
+            execution_time=execution_time,
+            success=False,
+            error=str(e)
+        )
+        
+        # Send error to coordinator
+        error_msg = create_mcp_message(
+            role="agent",
+            name="Coordinator",
+            content={"error": f"Evaluation error: {str(e)}", "error_type": "system"},
+            conversation_id=conversation_id
+        )
+        coordinator_send(error_msg)
+        
+        return {"error": str(e), "error_type": "system"}
