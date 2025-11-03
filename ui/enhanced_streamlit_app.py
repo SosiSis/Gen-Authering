@@ -31,16 +31,9 @@ class MultiAgentUI:
             self._initialized = True
     
     def setup_page_config(self):
-        """Configure Streamlit page settings"""
-        st.set_page_config(
-            page_title="Multi-Agent Publication Generator",
-            page_icon="📚",
-            layout="wide",
-            initial_sidebar_state="expanded",
-            menu_items={
-                'About': "Multi-Agent Publication Generator - Transform GitHub repos into research papers"
-            }
-        )
+        """Configure Streamlit page settings - Page config already set in main app"""
+        # Page config is already set in streamlit_app.py, just setup styling
+        pass
         
         # Custom CSS for better styling
         st.markdown("""
@@ -669,6 +662,10 @@ class MultiAgentUI:
             st.error("A critical error occurred. Please refresh the page.")
 
 
-if __name__ == "__main__":
+def create_enhanced_app():
+    """Create and run the enhanced UI application"""
     app = MultiAgentUI()
     app.run()
+
+if __name__ == "__main__":
+    create_enhanced_app()
