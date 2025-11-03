@@ -618,7 +618,7 @@ class MultiAgentUI:
         
         st.session_state.pipeline_status = "idle"
         st.success("✅ Session reset successfully!")
-        st.experimental_rerun()
+        st.rerun()
     
     def emergency_stop(self):
         """Emergency stop the current process"""

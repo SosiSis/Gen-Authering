@@ -149,37 +149,49 @@ class ConfigurationManager:
     
     def _load_from_environment(self):
         """Load configuration values from environment variables"""
+        # Try Streamlit secrets first, then fall back to environment variables
+        def get_value(key: str, default: str = "") -> str:
+            # Try Streamlit secrets first
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets') and key in st.secrets:
+                    return str(st.secrets[key])
+            except (ImportError, AttributeError, KeyError):
+                pass
+            # Fall back to environment variables
+            return os.getenv(key, default)
+        
         # Application settings
-        self.config.debug = self._get_bool("DEBUG", self.config.debug)
-        self.config.host = os.getenv("HOST", self.config.host)
-        self.config.port = self._get_int("PORT", self.config.port)
+        self.config.debug = self._get_bool_from_sources("DEBUG", self.config.debug)
+        self.config.host = get_value("HOST", self.config.host)
+        self.config.port = self._get_int_from_sources("PORT", self.config.port)
         
         # Directories
-        self.config.data_dir = os.getenv("DATA_DIR", self.config.data_dir)
-        self.config.output_dir = os.getenv("OUTPUT_DIR", self.config.output_dir)
-        self.config.temp_dir = os.getenv("TEMP_DIR", self.config.temp_dir)
-        self.config.logs_dir = os.getenv("LOGS_DIR", self.config.logs_dir)
+        self.config.data_dir = get_value("DATA_DIR", self.config.data_dir)
+        self.config.output_dir = get_value("OUTPUT_DIR", self.config.output_dir)
+        self.config.temp_dir = get_value("TEMP_DIR", self.config.temp_dir)
+        self.config.logs_dir = get_value("LOGS_DIR", self.config.logs_dir)
         
         # LLM configuration
-        self.config.llm.api_key = os.getenv("GROQ_API_KEY", "")
-        self.config.llm.model = os.getenv("LLM_MODEL", self.config.llm.model)
-        self.config.llm.temperature = self._get_float("LLM_TEMPERATURE", self.config.llm.temperature)
-        self.config.llm.max_tokens = self._get_int("LLM_MAX_TOKENS", self.config.llm.max_tokens)
-        self.config.llm.timeout = self._get_int("LLM_TIMEOUT", self.config.llm.timeout)
+        self.config.llm.api_key = get_value("GROQ_API_KEY", "")
+        self.config.llm.model = get_value("LLM_MODEL", self.config.llm.model)
+        self.config.llm.temperature = self._get_float_from_sources("LLM_TEMPERATURE", self.config.llm.temperature)
+        self.config.llm.max_tokens = self._get_int_from_sources("LLM_MAX_TOKENS", self.config.llm.max_tokens)
+        self.config.llm.timeout = self._get_int_from_sources("LLM_TIMEOUT", self.config.llm.timeout)
         
         # Security configuration
-        self.config.security.secret_key = os.getenv("SECRET_KEY", self.config.security.secret_key)
-        self.config.security.max_file_size_mb = self._get_int("MAX_FILE_SIZE_MB", self.config.security.max_file_size_mb)
-        self.config.security.enable_ssl = self._get_bool("ENABLE_SSL", self.config.security.enable_ssl)
+        self.config.security.secret_key = get_value("SECRET_KEY", self.config.security.secret_key)
+        self.config.security.max_file_size_mb = self._get_int_from_sources("MAX_FILE_SIZE_MB", self.config.security.max_file_size_mb)
+        self.config.security.enable_ssl = self._get_bool_from_sources("ENABLE_SSL", self.config.security.enable_ssl)
         
         # Logging configuration
-        self.config.logging.level = os.getenv("LOG_LEVEL", self.config.logging.level)
-        self.config.logging.log_dir = os.getenv("LOG_DIR", self.config.logging.log_dir)
+        self.config.logging.level = get_value("LOG_LEVEL", self.config.logging.level)
+        self.config.logging.log_dir = get_value("LOG_DIR", self.config.logging.log_dir)
         
         # Feature flags
-        self.config.enable_caching = self._get_bool("ENABLE_CACHING", self.config.enable_caching)
-        self.config.enable_rate_limiting = self._get_bool("ENABLE_RATE_LIMITING", self.config.enable_rate_limiting)
-        self.config.enable_audit_logging = self._get_bool("ENABLE_AUDIT_LOGGING", self.config.enable_audit_logging)
+        self.config.enable_caching = self._get_bool_from_sources("ENABLE_CACHING", self.config.enable_caching)
+        self.config.enable_rate_limiting = self._get_bool_from_sources("ENABLE_RATE_LIMITING", self.config.enable_rate_limiting)
+        self.config.enable_audit_logging = self._get_bool_from_sources("ENABLE_AUDIT_LOGGING", self.config.enable_audit_logging)
     
     def _validate_configuration(self):
         """Validate configuration values and constraints"""
@@ -241,9 +253,26 @@ class ConfigurationManager:
         
         logger.info(f"Created directories: {directories}")
     
+    def _get_value_from_sources(self, key: str, default: str = "") -> str:
+        """Get value from Streamlit secrets or environment variables"""
+        # Try Streamlit secrets first
+        try:
+            import streamlit as st
+            if hasattr(st, 'secrets') and key in st.secrets:
+                return str(st.secrets[key])
+        except (ImportError, AttributeError, KeyError):
+            pass
+        # Fall back to environment variables
+        return os.getenv(key, default)
+    
     def _get_bool(self, key: str, default: bool) -> bool:
         """Get boolean value from environment"""
         value = os.getenv(key, str(default)).lower()
+        return value in ('true', '1', 'yes', 'on')
+    
+    def _get_bool_from_sources(self, key: str, default: bool) -> bool:
+        """Get boolean value from Streamlit secrets or environment"""
+        value = self._get_value_from_sources(key, str(default)).lower()
         return value in ('true', '1', 'yes', 'on')
     
     def _get_int(self, key: str, default: int) -> int:
@@ -254,10 +283,26 @@ class ConfigurationManager:
             logger.warning(f"Invalid integer value for {key}, using default: {default}")
             return default
     
+    def _get_int_from_sources(self, key: str, default: int) -> int:
+        """Get integer value from Streamlit secrets or environment"""
+        try:
+            return int(self._get_value_from_sources(key, str(default)))
+        except ValueError:
+            logger.warning(f"Invalid integer value for {key}, using default: {default}")
+            return default
+    
     def _get_float(self, key: str, default: float) -> float:
         """Get float value from environment"""
         try:
             return float(os.getenv(key, str(default)))
+        except ValueError:
+            logger.warning(f"Invalid float value for {key}, using default: {default}")
+            return default
+    
+    def _get_float_from_sources(self, key: str, default: float) -> float:
+        """Get float value from Streamlit secrets or environment"""
+        try:
+            return float(self._get_value_from_sources(key, str(default)))
         except ValueError:
             logger.warning(f"Invalid float value for {key}, using default: {default}")
             return default
