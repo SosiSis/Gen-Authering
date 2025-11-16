@@ -280,16 +280,7 @@ response = groq_chat([
 ])
 ```
 
-#### Quality Evaluation
-```python
-from agents.nodes import evaluator_node
 
-# Evaluate document quality  
-metrics = evaluator_node({
-    "content": {"md_path": "/path/to/document.md"},
-    "metadata": {"conversation_id": "uuid"}
-}, coordinator_send)
-```
 
 ## 🤝 Contributing
 

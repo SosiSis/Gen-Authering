@@ -554,33 +554,33 @@ class MultiAgentUI:
                 st.markdown("### Preview:")
                 st.markdown(edited_text)
     
-    def render_evaluation_section(self):
-        """Render document evaluation section"""
-        if st.session_state.md_path:
-            st.markdown('<h2 class="section-header">📊 Quality Evaluation</h2>', 
-                       unsafe_allow_html=True)
+    # def render_evaluation_section(self):
+    #     """Render document evaluation section"""
+    #     if st.session_state.md_path:
+    #         st.markdown('<h2 class="section-header">📊 Quality Evaluation</h2>', 
+    #                    unsafe_allow_html=True)
             
-            col1, col2, col3 = st.columns([1, 1, 2])
+    #         col1, col2, col3 = st.columns([1, 1, 2])
             
-            with col1:
-                run_evaluation = st.button(
-                    "🧮 Analyze Quality",
-                    use_container_width=True,
-                    help="Run readability and quality analysis"
-                )
+    #         with col1:
+    #             run_evaluation = st.button(
+    #                 "🧮 Analyze Quality",
+    #                 use_container_width=True,
+    #                 help="Run readability and quality analysis"
+    #             )
             
-            with col2:
-                # Manual evaluation for testing
-                if st.button("🔄 Force Refresh", use_container_width=True, help="Refresh evaluation results"):
-                    st.rerun()
+    #         with col2:
+    #             # Manual evaluation for testing
+    #             if st.button("🔄 Force Refresh", use_container_width=True, help="Refresh evaluation results"):
+    #                 st.rerun()
                     
-            with col3:
-                if run_evaluation:
-                    with st.spinner("Analyzing document quality..."):
-                        self.run_evaluation()
+    #         with col3:
+    #             if run_evaluation:
+    #                 with st.spinner("Analyzing document quality..."):
+    #                     self.run_evaluation()
             
-            # Display evaluation results
-            self.display_evaluation_results()
+    #         # Display evaluation results
+    #         self.display_evaluation_results()
     
     def run_evaluation(self):
         """Run document evaluation"""
@@ -857,7 +857,7 @@ class MultiAgentUI:
             self.render_pipeline_controls(repo_url)
             self.render_status_display()
             self.render_editor()
-            self.render_evaluation_section()
+            # self.render_evaluation_section()
             self.render_pdf_generation()
             self.render_error_log()
             
