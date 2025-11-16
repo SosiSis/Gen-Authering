@@ -20,7 +20,7 @@ load_dotenv()
 setup_logging()
 
 class MultiAgentUI:
-    """Enhanced UI class for the Multi-Agent Publication System"""
+    """Enhanced UI class for the Gen-Authering Publication System"""
     
     def __init__(self):
         self.coordinator = None
@@ -361,13 +361,32 @@ class MultiAgentUI:
             
             # Send message and process
             with st.spinner("🤖 Cloning repository and starting analysis..."):
-                self.coordinator.send(msg)
-                self.coordinator.run_once()
-                self.coordinator.run_once()
+                try:
+                    self.coordinator.send(msg)
+                    self.coordinator.run_once()
+                    self.coordinator.run_once()
+                except Exception as e:
+                    raise Exception(f"Coordinator execution error: {str(e)}")
             
             # Check for draft completion
-            events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
-            draft_event = next((e for e in events if e.get("content", {}).get("status") == "draft_ready"), None)
+            try:
+                events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
+                
+                # Debug: log events structure
+                if events:
+                    system_logger.logger.debug("pipeline_events", extra={
+                        "event_type": "debug",
+                        "events_count": len(events),
+                        "events_sample": str(events[:2]) if len(events) > 0 else "none"
+                    })
+                
+                draft_event = None
+                for event in events:
+                    if isinstance(event, dict) and event.get("content", {}).get("status") == "draft_ready":
+                        draft_event = event
+                        break
+            except Exception as e:
+                raise Exception(f"Event processing error: {str(e)} - Events type: {type(events) if 'events' in locals() else 'undefined'}")
             
             if draft_event:
                 st.session_state.md_path = draft_event["content"]["md_path"]
@@ -381,7 +400,11 @@ class MultiAgentUI:
                 
             else:
                 # Check for errors
-                error_events = [e for e in events if "error" in e.get("content", {})]
+                error_events = []
+                for event in events:
+                    if isinstance(event, dict) and "error" in event.get("content", {}):
+                        error_events.append(event)
+                
                 if error_events:
                     error_msg = error_events[0]["content"]["error"]
                     st.session_state.error_log.append(error_msg)
@@ -554,7 +577,11 @@ class MultiAgentUI:
         """Display evaluation results"""
         if st.session_state.conversation_id:
             events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
-            eval_events = [e for e in events if e.get("content", {}).get("status") == "eval_done"]
+            
+            eval_events = []
+            for event in events:
+                if isinstance(event, dict) and event.get("content", {}).get("status") == "eval_done":
+                    eval_events.append(event)
             
             if eval_events:
                 latest_eval = eval_events[-1]["content"]
@@ -638,7 +665,12 @@ class MultiAgentUI:
             
             # Check for PDF completion
             events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
-            pdf_event = next((e for e in events if e.get("content", {}).get("status") == "pdf_ready"), None)
+            
+            pdf_event = None
+            for event in events:
+                if isinstance(event, dict) and event.get("content", {}).get("status") == "pdf_ready":
+                    pdf_event = event
+                    break
             
             if pdf_event:
                 st.session_state.pdf_path = pdf_event["content"]["pdf_path"]

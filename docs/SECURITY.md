@@ -2,7 +2,7 @@
 
 ## Security Overview
 
-The Multi-Agent Publication Generator implements comprehensive security measures to protect against common vulnerabilities and ensure safe operation in production environments.
+The Gen-Authering Publication Generator implements comprehensive security measures to protect against common vulnerabilities and ensure safe operation in production environments.
 
 ## Security Architecture
 

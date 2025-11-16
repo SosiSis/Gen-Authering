@@ -1,5 +1,5 @@
 """
-Multi-Agent Publication Generator - Production-Ready Streamlit App
+Gen-Authering Publication Generator - Production-Ready Streamlit App
 This is the main entry point with comprehensive error handling and fallback mechanisms.
 """
 
@@ -16,12 +16,12 @@ import streamlit as st
 
 # Set page config ONCE at the very top
 st.set_page_config(
-    page_title="Multi-Agent Publication Generator",
+    page_title="Gen-Authering Publication Generator",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'About': "Multi-Agent Publication Generator - Transform GitHub repos into research papers"
+        'About': "Gen-Authering Publication Generator - Transform GitHub repos into research papers"
     }
 )
 
@@ -112,7 +112,7 @@ def create_basic_ui():
         
     # Header
     st.markdown("""
-    # 📚 Multi-Agent Publication Generator
+    # 📚 Gen-Authering Publication Generator
     ### 🔄 Basic Mode Active
     
     **Note:** Running in basic mode due to enhanced UI issues. Some features may be limited.
