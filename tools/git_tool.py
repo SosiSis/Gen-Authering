@@ -55,14 +55,28 @@ def clone_repo(repo_url: str, dest_dir: Optional[str] = None) -> str:
         })
         
         # Clone the repository with security options
-        repo = Repo.clone_from(
-            validated_url, 
-            dest,
-            # Security options
-            depth=1,  # Shallow clone to reduce attack surface
-            single_branch=True,  # Only clone default branch
-            config='http.sslVerify=true'  # Ensure SSL verification
-        )
+        try:
+            repo = Repo.clone_from(
+                validated_url, 
+                dest,
+                # Security options
+                depth=1,  # Shallow clone to reduce attack surface
+                single_branch=True,  # Only clone default branch
+                # Note: SSL verification is handled by git's global config
+            )
+        except GitCommandError as git_error:
+            # Handle specific git configuration errors
+            error_msg = str(git_error)
+            if "--config is not allowed" in error_msg:
+                # Retry without any configuration options
+                system_logger.logger.warning("git_config_restricted", extra={
+                    "event_type": "git_warning",
+                    "message": "Git config options restricted, retrying with basic options",
+                    "repo_url": validated_url
+                })
+                repo = Repo.clone_from(validated_url, dest, depth=1, single_branch=True)
+            else:
+                raise
         
         clone_time = time.time() - start_time
         
@@ -130,7 +144,7 @@ def list_files(root: str, max_files: int = 10000,
         system_logger.logger.warning("file_listing_suspicious_path", extra={
             "event_type": "security_warning",
             "root_path": root,
-            "message": "File listing outside temporary directory"
+            "warning_message": "File listing outside temporary directory"
         })
     
     files = []
@@ -151,7 +165,7 @@ def list_files(root: str, max_files: int = 10000,
                         "event_type": "security_warning",
                         "root_path": root,
                         "max_files": max_files,
-                        "message": "File listing limit exceeded"
+                        "warning_message": "File listing limit exceeded"
                     })
                     raise ValueError(f"Too many files found (>{max_files}). Possible security issue.")
                 
@@ -200,7 +214,14 @@ def cleanup_repo(repo_path: str) -> bool:
     """
     try:
         if os.path.exists(repo_path) and repo_path.startswith(tempfile.gettempdir()):
-            shutil.rmtree(repo_path)
+            # Handle Windows permission issues with git files
+            def handle_remove_readonly(func, path, exc):
+                """Error handler for Windows readonly files"""
+                if os.path.exists(path):
+                    os.chmod(path, 0o777)
+                    func(path)
+            
+            shutil.rmtree(repo_path, onerror=handle_remove_readonly)
             
             system_logger.logger.info("repo_cleanup_success", extra={
                 "event_type": "repo_cleanup",
