@@ -24,6 +24,10 @@ class LangGraphCoordinator:
         # canonicalize minimal metadata
         if "metadata" not in mcp_msg:
             mcp_msg["metadata"] = {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"), "conversation_id": None}
+        else:
+            # Ensure timestamp exists but preserve existing conversation_id
+            if "timestamp" not in mcp_msg["metadata"]:
+                mcp_msg["metadata"]["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ")
         self.msg_queue.put(mcp_msg)
 
     def _dispatch(self, mcp_msg):

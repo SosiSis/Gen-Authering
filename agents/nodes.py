@@ -250,9 +250,11 @@ def evaluator_node(msg: Dict[str, Any], coordinator_send: Callable) -> Dict[str,
             raise ValidationError(f"Markdown file not found: {md_path}")
         
         # Security check: ensure file is in allowed directory
-        abs_md_path = os.path.abspath(md_path)
-        if not abs_md_path.startswith(os.path.abspath("output")):
-            raise SecurityViolationError("Markdown file outside allowed directory")
+        abs_md_path = os.path.abspath(md_path).lower()  # Normalize case on Windows
+        # Allow files in the output directory relative to the current working directory
+        allowed_output_dir = os.path.abspath("output").lower()  # Normalize case on Windows
+        if not abs_md_path.startswith(allowed_output_dir):
+            raise SecurityViolationError(f"Markdown file outside allowed directory. File: {abs_md_path}, Allowed: {allowed_output_dir}")
         
         system_logger.logger.info("evaluator_start", extra={
             "event_type": "agent_execution_start",

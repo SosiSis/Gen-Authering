@@ -215,6 +215,26 @@ class MultiAgentUI:
             validate_ssl = st.checkbox("Validate SSL Certificates", value=True, disabled=True)
             rate_limiting = st.checkbox("Enable Rate Limiting", value=True, disabled=True)
             
+            # Test mode section
+            st.markdown("**🧪 Test Mode**")
+            with st.expander("Load Existing File"):
+                st.markdown("Load an existing file for testing evaluation:")
+                output_files = []
+                output_dir = "output"
+                if os.path.exists(output_dir):
+                    output_files = [f for f in os.listdir(output_dir) if f.endswith('.md')]
+                
+                if output_files:
+                    selected_file = st.selectbox("Select a file:", [""] + output_files)
+                    if selected_file and st.button("Load File"):
+                        file_path = os.path.join(output_dir, selected_file)
+                        st.session_state.md_path = file_path
+                        st.session_state.conversation_id = f"test-{selected_file.replace('.md', '')}"
+                        st.success(f"Loaded: {selected_file}")
+                        st.rerun()
+                else:
+                    st.info("No .md files found in output directory")
+            
             # Help section
             st.markdown('<h2 class="section-header">❓ Help & Info</h2>', 
                        unsafe_allow_html=True)
@@ -540,7 +560,7 @@ class MultiAgentUI:
             st.markdown('<h2 class="section-header">📊 Quality Evaluation</h2>', 
                        unsafe_allow_html=True)
             
-            col1, col2 = st.columns([1, 3])
+            col1, col2, col3 = st.columns([1, 1, 2])
             
             with col1:
                 run_evaluation = st.button(
@@ -550,6 +570,11 @@ class MultiAgentUI:
                 )
             
             with col2:
+                # Manual evaluation for testing
+                if st.button("🔄 Force Refresh", use_container_width=True, help="Refresh evaluation results"):
+                    st.rerun()
+                    
+            with col3:
                 if run_evaluation:
                     with st.spinner("Analyzing document quality..."):
                         self.run_evaluation()
@@ -562,6 +587,13 @@ class MultiAgentUI:
         try:
             st.info("🔍 Starting quality analysis...")
             
+            # Check if we have a valid file
+            if not st.session_state.md_path or not os.path.exists(st.session_state.md_path):
+                st.error("❌ No document file found to analyze!")
+                return
+                
+            st.info(f"📝 Analyzing file: {os.path.basename(st.session_state.md_path)}")
+            
             eval_msg = create_mcp_message(
                 role="agent",
                 name="EvaluatorNode",
@@ -569,12 +601,21 @@ class MultiAgentUI:
                 conversation_id=st.session_state.conversation_id
             )
             
-            st.info(f"📝 Analyzing file: {st.session_state.md_path}")
-            
+            # Send the evaluation message
             self.coordinator.send(eval_msg)
+            
+            # Process the evaluation
             self.coordinator.run_once()
             
-            st.success("✅ Quality analysis completed!")
+            # Check if evaluation completed immediately
+            events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
+            eval_events = [e for e in events if isinstance(e, dict) and e.get("content", {}).get("status") == "eval_done"]
+            
+            if eval_events:
+                st.success(f"✅ Quality analysis completed! Found {len(eval_events)} results.")
+            else:
+                st.warning("⏳ Analysis in progress... Results may appear after refresh.")
+                st.info("💡 Try clicking 'Analyze Quality' again if results don't appear.")
             
             # Force rerun to show results
             st.rerun()
@@ -594,10 +635,20 @@ class MultiAgentUI:
             
             # Debug info
             if st.checkbox("🔍 Show Debug Info", key="eval_debug"):
-                st.write(f"Total events: {len(events)}")
-                st.write(f"Eval events found: {len(eval_events)}")
+                st.write(f"**Total events:** {len(events)}")
+                st.write(f"**Conversation ID:** {st.session_state.conversation_id}")
+                st.write(f"**MD Path:** {st.session_state.md_path}")
+                st.write(f"**Eval events found:** {len(eval_events)}")
+                
+                # Show all events for debugging
+                if st.checkbox("📋 Show All Events", key="show_all_events"):
+                    for i, event in enumerate(events):
+                        st.write(f"**Event {i+1}:**")
+                        st.json(event)
+                
                 if eval_events:
-                    st.write("Latest eval event:", eval_events[-1])
+                    st.write("**Latest eval event content:**")
+                    st.json(eval_events[-1]["content"])
             
             if eval_events:
                 st.success(f"📊 Found {len(eval_events)} evaluation result(s)")
