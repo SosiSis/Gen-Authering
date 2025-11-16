@@ -163,7 +163,7 @@ class MultiAgentUI:
     
     def render_header(self):
         """Render the main header and navigation"""
-        st.markdown('<h1 class="main-header">📚 Multi-Agent Publication Generator</h1>', 
+        st.markdown('<h1 class="main-header">📚 Gen-Authering Publication Generator</h1>', 
                    unsafe_allow_html=True)
         
         st.markdown("""
@@ -462,19 +462,29 @@ class MultiAgentUI:
                 )
                 
                 # Editor controls
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3, col4, col5 = st.columns(5)
                 
                 with col1:
                     save_edits = st.button("💾 Save Edits", use_container_width=True)
                 
                 with col2:
-                    auto_save = st.checkbox("Auto-save", help="Automatically save changes")
+                    # Download markdown button
+                    st.download_button(
+                        label="📄 Download MD",
+                        data=edited_text.encode('utf-8'),
+                        file_name=os.path.basename(st.session_state.md_path),
+                        mime="text/markdown",
+                        use_container_width=True
+                    )
                 
                 with col3:
+                    auto_save = st.checkbox("Auto-save", help="Automatically save changes")
+                
+                with col4:
                     word_count = len(edited_text.split())
                     st.metric("Words", word_count)
                 
-                with col4:
+                with col5:
                     char_count = len(edited_text)
                     st.metric("Characters", char_count)
                 
@@ -652,9 +662,48 @@ class MultiAgentUI:
                     """, unsafe_allow_html=True)
     
     def handle_error(self, context: str, error: Exception):
-        """Handle and log errors"""
-        error_msg = f"{context}: {str(error)}"
-        st.session_state.error_log.append(error_msg)
+        """Handle and log errors with user-friendly messages"""
+        error_msg = str(error)
+        user_friendly_msg = error_msg
+        
+        # Provide user-friendly messages for common errors
+        if "Repository error" in error_msg and "could not read Username" in error_msg:
+            user_friendly_msg = (
+                "🔒 Repository Access Error\n\n"
+                "This repository appears to be private or requires authentication. "
+                "Please ensure:\n"
+                "• The repository is public\n"
+                "• The URL is correct\n"
+                "• The repository exists\n\n"
+                "Only public GitHub repositories are currently supported."
+            )
+        elif "Repository not found" in error_msg:
+            user_friendly_msg = (
+                "🔍 Repository Not Found\n\n"
+                "The repository could not be found. Please check:\n"
+                "• The URL is spelled correctly\n"
+                "• The repository exists\n"
+                "• You have access to view it"
+            )
+        elif "Repository appears to be private" in error_msg:
+            user_friendly_msg = (
+                "🔒 Private Repository Detected\n\n"
+                "This repository is private and cannot be processed. "
+                "Please use a public repository or contact the repository owner "
+                "to make it public."
+            )
+        elif "Network" in error_msg or "timeout" in error_msg.lower():
+            user_friendly_msg = (
+                "🌐 Network Connection Error\n\n"
+                "Unable to connect to GitHub. Please check:\n"
+                "• Your internet connection\n"
+                "• GitHub's status (status.github.com)\n"
+                "• Try again in a few minutes"
+            )
+        
+        # Store both technical and user-friendly messages
+        technical_msg = f"{context}: {error_msg}"
+        st.session_state.error_log.append(technical_msg)
         st.session_state.pipeline_status = "error"
         
         # Log to system
@@ -664,7 +713,12 @@ class MultiAgentUI:
             "ui_component": "streamlit_app"
         })
         
-        st.error(f"❌ {error_msg}")
+        # Display user-friendly error
+        st.error(f"❌ {user_friendly_msg}")
+        
+        # Show technical details in expander for debugging
+        with st.expander("🔧 Technical Details"):
+            st.code(technical_msg)
     
     def reset_session(self):
         """Reset the current session"""

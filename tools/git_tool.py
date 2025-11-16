@@ -97,14 +97,40 @@ def clone_repo(repo_url: str, dest_dir: Optional[str] = None) -> str:
         raise
         
     except GitCommandError as e:
-        # Log git-specific errors
-        system_logger.log_error(e, {
+        # Log git-specific errors with better context
+        error_msg = str(e)
+        error_context = {
             "function": "clone_repo",
             "repo_url": repo_url,
             "dest_dir": dest_dir,
             "clone_time": time.time() - start_time
-        })
-        raise
+        }
+        
+        # Provide specific error messages for common issues
+        if "could not read Username" in error_msg:
+            user_friendly_error = (
+                "Repository authentication failed. This usually means:\n"
+                "1. The repository is private and requires authentication\n"
+                "2. The repository URL is incorrect or doesn't exist\n"
+                "3. The repository has been moved or deleted\n\n"
+                "Please verify the repository URL and ensure it's publicly accessible."
+            )
+        elif "Repository not found" in error_msg or "does not exist" in error_msg:
+            user_friendly_error = (
+                "Repository not found. Please check:\n"
+                "1. The repository URL is correct\n"
+                "2. The repository exists and is public\n"
+                "3. You have access to the repository"
+            )
+        elif "Permission denied" in error_msg:
+            user_friendly_error = (
+                "Permission denied. The repository may be private or you may need authentication."
+            )
+        else:
+            user_friendly_error = f"Git clone failed: {error_msg}"
+        
+        system_logger.log_error(e, error_context)
+        raise GitCommandError(command=e.command, status=e.status, stderr=user_friendly_error)
         
     except Exception as e:
         # Log unexpected errors

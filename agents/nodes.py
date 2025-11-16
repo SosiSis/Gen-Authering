@@ -188,7 +188,9 @@ def writer_node(msg, coordinator_send):
         system_msg = {"role":"system","content":"You are an academic writer. Produce a paper-style markdown including Title, Abstract, Introduction, Methods and Results summary from context."}
         user_msg = {"role":"user","content": f"Abstract:\n{abstract}\n\nMetrics:\n{json.dumps(metrics)}\n\nProduce an extended paper-style markdown draft."}
         md_text = groq_chat([system_msg, user_msg], model="llama-3.3-70b-versatile", temperature=0.2, max_tokens=1200)
-        md_path = os.path.join(TMP_OUT, f"{conversation_id}.md")
+        # Generate markdown filename starting with "Gen-Authering"  
+        md_filename = f"Gen-Authering-{conversation_id}.md"
+        md_path = os.path.join(TMP_OUT, md_filename)
         with open(md_path, "w", encoding='utf-8') as f:
             f.write(md_text)
         # send draft to Coordinator so UI can pick it up
@@ -201,7 +203,9 @@ def pdf_node(msg, coordinator_send):
     content = msg["content"]
     md_path = content.get("md_path")
     conversation_id = msg["metadata"]["conversation_id"]
-    pdf_out = os.path.join(TMP_OUT, f"{conversation_id}.pdf")
+    # Generate PDF filename starting with "Gen-Authering"
+    pdf_filename = f"Gen-Authering-{conversation_id}.pdf"
+    pdf_out = os.path.join(TMP_OUT, pdf_filename)
     md_to_pdf(md_path, pdf_out)
     out = create_mcp_message(role="agent", name="Coordinator", content={"status":"pdf_ready", "pdf_path": pdf_out}, conversation_id=conversation_id)
     coordinator_send(out)
@@ -278,7 +282,7 @@ def evaluator_node(msg: Dict[str, Any], coordinator_send: Callable) -> Dict[str,
         
         try:
             evaluation_results["flesch_reading_ease"] = textstat.flesch_reading_ease(txt)
-            evaluation_results["flesch_kincaid_grade"] = textstat.flesch_kincaid().grade(txt)
+            evaluation_results["flesch_kincaid_grade"] = textstat.flesch_kincaid(txt)
             evaluation_results["automated_readability_index"] = textstat.automated_readability_index(txt)
             evaluation_results["word_count"] = textstat.lexicon_count(txt)
             evaluation_results["sentence_count"] = textstat.sentence_count(txt)

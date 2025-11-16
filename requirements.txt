@@ -16,3 +16,4 @@ pytest-html
 coverage
 black
 isort
+requests
