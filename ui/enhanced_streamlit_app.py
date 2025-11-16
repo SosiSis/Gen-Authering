@@ -554,38 +554,44 @@ class MultiAgentUI:
                 st.markdown("### Preview:")
                 st.markdown(edited_text)
     
-    # def render_evaluation_section(self):
-    #     """Render document evaluation section"""
-    #     if st.session_state.md_path:
-    #         st.markdown('<h2 class="section-header">📊 Quality Evaluation</h2>', 
-    #                    unsafe_allow_html=True)
+    def render_evaluation_section(self):
+        """Render document evaluation section"""
+        if st.session_state.md_path:
+            st.markdown('<h2 class="section-header">📊 Quality Evaluation</h2>', 
+                       unsafe_allow_html=True)
             
-    #         col1, col2, col3 = st.columns([1, 1, 2])
+            col1, col2, col3 = st.columns([1, 1, 2])
             
-    #         with col1:
-    #             run_evaluation = st.button(
-    #                 "🧮 Analyze Quality",
-    #                 use_container_width=True,
-    #                 help="Run readability and quality analysis"
-    #             )
+            with col1:
+                run_evaluation = st.button(
+                    "🧮 Analyze Quality",
+                    use_container_width=True,
+                    help="Run readability and quality analysis"
+                )
             
-    #         with col2:
-    #             # Manual evaluation for testing
-    #             if st.button("🔄 Force Refresh", use_container_width=True, help="Refresh evaluation results"):
-    #                 st.rerun()
+            with col2:
+                # Manual evaluation for testing
+                if st.button("🔄 Force Refresh", use_container_width=True, help="Refresh evaluation results"):
+                    st.rerun()
                     
-    #         with col3:
-    #             if run_evaluation:
-    #                 with st.spinner("Analyzing document quality..."):
-    #                     self.run_evaluation()
+            with col3:
+                if run_evaluation:
+                    with st.spinner("Analyzing document quality..."):
+                        self.run_evaluation()
             
-    #         # Display evaluation results
-    #         self.display_evaluation_results()
+            # Display evaluation results
+            self.display_evaluation_results()
     
     def run_evaluation(self):
         """Run document evaluation"""
         try:
             st.info("🔍 Starting quality analysis...")
+            
+            # Ensure we have a conversation_id
+            if not st.session_state.conversation_id:
+                import uuid
+                st.session_state.conversation_id = str(uuid.uuid4())
+                st.info(f"📋 Created new conversation ID: {st.session_state.conversation_id[:8]}...")
             
             # Check if we have a valid file
             if not st.session_state.md_path or not os.path.exists(st.session_state.md_path):
@@ -593,6 +599,7 @@ class MultiAgentUI:
                 return
                 
             st.info(f"📝 Analyzing file: {os.path.basename(st.session_state.md_path)}")
+            st.info(f"🔗 Using conversation ID: {st.session_state.conversation_id[:8]}...")
             
             eval_msg = create_mcp_message(
                 role="agent",
@@ -601,21 +608,38 @@ class MultiAgentUI:
                 conversation_id=st.session_state.conversation_id
             )
             
+            st.write(f"🚀 Sending evaluation message with conversation_id: {eval_msg['metadata']['conversation_id'][:8]}...")
+            
             # Send the evaluation message
             self.coordinator.send(eval_msg)
+            st.info("📤 Message sent to coordinator")
             
             # Process the evaluation
+            st.info("⚙️ Processing evaluation...")
             self.coordinator.run_once()
+            st.info("✅ Coordinator processing complete")
             
             # Check if evaluation completed immediately
             events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
+            st.info(f"📊 Found {len(events)} total events in conversation")
+            
             eval_events = [e for e in events if isinstance(e, dict) and e.get("content", {}).get("status") == "eval_done"]
             
             if eval_events:
                 st.success(f"✅ Quality analysis completed! Found {len(eval_events)} results.")
+                # Show a sample of the results
+                latest_eval = eval_events[-1]["content"]
+                st.write(f"📈 Readability Score: {latest_eval.get('flesch_reading_ease', 'N/A')}")
+                st.write(f"📝 Word Count: {latest_eval.get('word_count', 'N/A')}")
             else:
                 st.warning("⏳ Analysis in progress... Results may appear after refresh.")
                 st.info("💡 Try clicking 'Analyze Quality' again if results don't appear.")
+                # Show debug info about what events we got
+                st.write("🔍 Debug - Event types found:")
+                for i, event in enumerate(events):
+                    status = event.get("content", {}).get("status", "no status")
+                    name = event.get("name", "no name")
+                    st.write(f"  {i+1}: {name} - {status}")
             
             # Force rerun to show results
             st.rerun()
@@ -625,6 +649,11 @@ class MultiAgentUI:
     
     def display_evaluation_results(self):
         """Display evaluation results"""
+        # First check if coordinator is available
+        if not hasattr(self, 'coordinator') or self.coordinator is None:
+            st.error("⚠️ Coordinator not initialized. Please refresh the page.")
+            return
+            
         if st.session_state.conversation_id:
             events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
             
@@ -632,6 +661,11 @@ class MultiAgentUI:
             for event in events:
                 if isinstance(event, dict) and event.get("content", {}).get("status") == "eval_done":
                     eval_events.append(event)
+            
+            # Always show basic status
+            st.write(f"🔗 **Conversation:** {st.session_state.conversation_id[:8] if st.session_state.conversation_id else 'None'}...")
+            st.write(f"📊 **Events in conversation:** {len(events)}")
+            st.write(f"✅ **Evaluation results:** {len(eval_events)}")
             
             # Debug info
             if st.checkbox("🔍 Show Debug Info", key="eval_debug"):

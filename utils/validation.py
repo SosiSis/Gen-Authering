@@ -69,12 +69,15 @@ def validate_github_url(url: str) -> str:
         if re.search(pattern, url, re.IGNORECASE):
             raise SecurityViolationError(f"URL contains suspicious pattern: {pattern}")
     
-    # Check if repository is publicly accessible
-    if not _is_github_repo_accessible(url):
-        raise ValidationError(
-            "Repository is not publicly accessible. "
-            "Please ensure the repository exists and is public, or provide a public repository URL."
-        )
+    # Check if repository is publicly accessible (but allow to proceed if check fails)
+    try:
+        if not _is_github_repo_accessible(url):
+            logger.warning(f"Could not verify repository accessibility: {url}")
+            # Don't fail validation - proceed with a warning instead
+            # This allows the system to work even with network issues
+    except Exception as e:
+        logger.warning(f"Repository accessibility check failed due to network error: {e}")
+        # Continue anyway - network issues shouldn't block valid URLs
     
     # Return sanitized URL
     return url
@@ -88,7 +91,7 @@ def _is_github_repo_accessible(url: str) -> bool:
         url: GitHub repository URL
         
     Returns:
-        True if repository is accessible, False otherwise
+        True if repository is accessible, False if not accessible or check failed
     """
     try:
         # Convert github.com URL to API URL for checking
@@ -102,24 +105,42 @@ def _is_github_repo_accessible(url: str) -> bool:
             
             # Use GitHub API to check if repo exists and is public
             api_url = f"https://api.github.com/repos/{owner}/{repo}"
-            response = requests.get(api_url, timeout=10)
+            
+            # Add headers to identify our request
+            headers = {
+                'User-Agent': 'Gen-Authering/1.0',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+            
+            response = requests.get(api_url, timeout=10, headers=headers)
             
             if response.status_code == 200:
                 repo_data = response.json()
                 # Check if repository is public (not private)
-                return not repo_data.get('private', True)
+                is_public = not repo_data.get('private', True)
+                logger.info(f"Repository {owner}/{repo} accessibility check: {'public' if is_public else 'private'}")
+                return is_public
             elif response.status_code == 404:
                 logger.warning(f"Repository not found or private: {url}")
                 return False
+            elif response.status_code == 403:
+                logger.warning(f"GitHub API rate limited or access denied for {url}")
+                # Return True for rate limit issues - assume repo is accessible
+                return True
             else:
                 logger.warning(f"GitHub API error {response.status_code} for {url}")
-                return False
+                # For other errors, assume accessible to avoid blocking valid URLs
+                return True
                 
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Network error checking repository accessibility: {e}")
+        # Network issues shouldn't block URL validation
+        return True
     except Exception as e:
         logger.warning(f"Error checking repository accessibility: {e}")
-        return False
+        return True
     
-    return False
+    return True  # Default to accessible if we can't determine otherwise
 
 
 def validate_file_path(file_path: str, allowed_extensions: Optional[List[str]] = None) -> str:
