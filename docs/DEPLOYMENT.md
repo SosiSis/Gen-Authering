@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide covers deployment strategies for the Multi-Agent Publication Generator in different environments.
+This guide covers deployment strategies for the Gen-Authering  Publication Generator in different environments.
 
 ## Environment Setup
 
