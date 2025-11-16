@@ -282,11 +282,11 @@ def evaluator_node(msg: Dict[str, Any], coordinator_send: Callable) -> Dict[str,
         
         try:
             evaluation_results["flesch_reading_ease"] = textstat.flesch_reading_ease(txt)
-            evaluation_results["flesch_kincaid_grade"] = textstat.flesch_kincaid(txt)
+            evaluation_results["flesch_kincaid_grade"] = textstat.flesch_kincaid_grade(txt)
             evaluation_results["automated_readability_index"] = textstat.automated_readability_index(txt)
             evaluation_results["word_count"] = textstat.lexicon_count(txt)
             evaluation_results["sentence_count"] = textstat.sentence_count(txt)
-            evaluation_results["avg_sentence_length"] = textstat.avg_sentence_length(txt)
+            evaluation_results["avg_sentence_length"] = textstat.words_per_sentence(txt)
         except Exception as metric_error:
             system_logger.logger.warning("textstat_calculation_error", extra={
                 "event_type": "calculation_error",

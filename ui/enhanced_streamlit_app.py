@@ -560,6 +560,8 @@ class MultiAgentUI:
     def run_evaluation(self):
         """Run document evaluation"""
         try:
+            st.info("🔍 Starting quality analysis...")
+            
             eval_msg = create_mcp_message(
                 role="agent",
                 name="EvaluatorNode",
@@ -567,8 +569,15 @@ class MultiAgentUI:
                 conversation_id=st.session_state.conversation_id
             )
             
+            st.info(f"📝 Analyzing file: {st.session_state.md_path}")
+            
             self.coordinator.send(eval_msg)
             self.coordinator.run_once()
+            
+            st.success("✅ Quality analysis completed!")
+            
+            # Force rerun to show results
+            st.rerun()
             
         except Exception as e:
             self.handle_error("Evaluation failed", e)
@@ -583,7 +592,15 @@ class MultiAgentUI:
                 if isinstance(event, dict) and event.get("content", {}).get("status") == "eval_done":
                     eval_events.append(event)
             
+            # Debug info
+            if st.checkbox("🔍 Show Debug Info", key="eval_debug"):
+                st.write(f"Total events: {len(events)}")
+                st.write(f"Eval events found: {len(eval_events)}")
+                if eval_events:
+                    st.write("Latest eval event:", eval_events[-1])
+            
             if eval_events:
+                st.success(f"📊 Found {len(eval_events)} evaluation result(s)")
                 latest_eval = eval_events[-1]["content"]
                 
                 col1, col2, col3, col4 = st.columns(4)
