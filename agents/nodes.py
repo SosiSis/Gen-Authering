@@ -203,13 +203,52 @@ def pdf_node(msg, coordinator_send):
     content = msg["content"]
     md_path = content.get("md_path")
     conversation_id = msg["metadata"]["conversation_id"]
-    # Generate PDF filename starting with "Gen-Authering"
-    pdf_filename = f"Gen-Authering-{conversation_id}.pdf"
-    pdf_out = os.path.join(TMP_OUT, pdf_filename)
-    md_to_pdf(md_path, pdf_out)
-    out = create_mcp_message(role="agent", name="Coordinator", content={"status":"pdf_ready", "pdf_path": pdf_out}, conversation_id=conversation_id)
-    coordinator_send(out)
-    return {"status":"pdf_ready", "pdf_path": pdf_out}
+    
+    # Validate md_path
+    if not md_path:
+        error_msg = create_mcp_message(
+            role="agent", 
+            name="Coordinator", 
+            content={"error": "No md_path provided for PDF generation"}, 
+            conversation_id=conversation_id
+        )
+        coordinator_send(error_msg)
+        return {"error": "No md_path provided"}
+    
+    if not os.path.exists(md_path):
+        error_msg = create_mcp_message(
+            role="agent", 
+            name="Coordinator", 
+            content={"error": f"Markdown file not found: {md_path}"}, 
+            conversation_id=conversation_id
+        )
+        coordinator_send(error_msg)
+        return {"error": f"Markdown file not found: {md_path}"}
+    
+    try:
+        # Generate PDF filename starting with "Gen-Authering"
+        pdf_filename = f"Gen-Authering-{conversation_id}.pdf"
+        pdf_out = os.path.join(TMP_OUT, pdf_filename)
+        md_to_pdf(md_path, pdf_out)
+        
+        out = create_mcp_message(
+            role="agent", 
+            name="Coordinator", 
+            content={"status":"pdf_ready", "pdf_path": pdf_out}, 
+            conversation_id=conversation_id
+        )
+        coordinator_send(out)
+        return {"status":"pdf_ready", "pdf_path": pdf_out}
+    
+    except Exception as e:
+        error_msg = create_mcp_message(
+            role="agent", 
+            name="Coordinator", 
+            content={"error": f"PDF generation failed: {str(e)}"}, 
+            conversation_id=conversation_id
+        )
+        coordinator_send(error_msg)
+        return {"error": f"PDF generation failed: {str(e)}"}
 
 def evaluator_node(msg: Dict[str, Any], coordinator_send: Callable) -> Dict[str, Any]:
     """

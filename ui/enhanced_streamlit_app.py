@@ -587,19 +587,20 @@ class MultiAgentUI:
         try:
             st.info("🔍 Starting quality analysis...")
             
-            # Ensure we have a conversation_id
-            if not st.session_state.conversation_id:
-                import uuid
-                st.session_state.conversation_id = str(uuid.uuid4())
-                st.info(f"📋 Created new conversation ID: {st.session_state.conversation_id[:8]}...")
-            
             # Check if we have a valid file
             if not st.session_state.md_path or not os.path.exists(st.session_state.md_path):
                 st.error("❌ No document file found to analyze!")
                 return
                 
+            # Use existing conversation_id if available, otherwise create new one
+            if not st.session_state.conversation_id:
+                import uuid
+                st.session_state.conversation_id = str(uuid.uuid4())
+                st.info(f"📋 Created new conversation ID: {st.session_state.conversation_id[:8]}...")
+            else:
+                st.info(f"🔗 Using existing conversation ID: {st.session_state.conversation_id[:8]}...")
+                
             st.info(f"📝 Analyzing file: {os.path.basename(st.session_state.md_path)}")
-            st.info(f"🔗 Using conversation ID: {st.session_state.conversation_id[:8]}...")
             
             eval_msg = create_mcp_message(
                 role="agent",
@@ -641,8 +642,8 @@ class MultiAgentUI:
                     name = event.get("name", "no name")
                     st.write(f"  {i+1}: {name} - {status}")
             
-            # Force rerun to show results
-            st.rerun()
+            # Don't force rerun here to prevent conversation reset
+            # st.rerun()
             
         except Exception as e:
             self.handle_error("Evaluation failed", e)
@@ -654,60 +655,127 @@ class MultiAgentUI:
             st.error("⚠️ Coordinator not initialized. Please refresh the page.")
             return
             
+        # Get all events for debugging
+        all_events = self.coordinator.get_conversation_events()
+        eval_events_all = []
+        for event in all_events:
+            if isinstance(event, dict) and event.get("content", {}).get("status") == "eval_done":
+                eval_events_all.append(event)
+        
+        # Also get conversation-specific events if we have a conversation_id
+        conversation_events = []
+        eval_events_conv = []
         if st.session_state.conversation_id:
-            events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
-            
-            eval_events = []
-            for event in events:
+            conversation_events = self.coordinator.get_conversation_events(st.session_state.conversation_id)
+            for event in conversation_events:
                 if isinstance(event, dict) and event.get("content", {}).get("status") == "eval_done":
-                    eval_events.append(event)
+                    eval_events_conv.append(event)
+        
+        # Use the most recent eval events from either source
+        eval_events = eval_events_conv if eval_events_conv else eval_events_all
             
-            # Always show basic status
-            st.write(f"🔗 **Conversation:** {st.session_state.conversation_id[:8] if st.session_state.conversation_id else 'None'}...")
-            st.write(f"📊 **Events in conversation:** {len(events)}")
-            st.write(f"✅ **Evaluation results:** {len(eval_events)}")
+        
+        # Always show basic status
+        st.write(f"🔗 **Conversation:** {st.session_state.conversation_id[:8] if st.session_state.conversation_id else 'None'}...")
+        st.write(f"📊 **Events in conversation:** {len(conversation_events)}")
+        st.write(f"📋 **All eval events found:** {len(eval_events_all)}")
+        st.write(f"✅ **Evaluation results for this session:** {len(eval_events)}")
+        
+        # Show recent evaluation data if available
+        if eval_events:
+            latest_eval = eval_events[-1]["content"]
+            st.info(f"📈 Latest: Score {latest_eval.get('flesch_reading_ease', 0):.1f}, Words {latest_eval.get('word_count', 0)}, Sentences {latest_eval.get('sentence_count', 0)}")
+        
+        # Debug info
+        if st.checkbox("🔍 Show Debug Info", key="eval_debug"):
+            st.write(f"**Total conversation events:** {len(conversation_events)}")
+            st.write(f"**Conversation ID:** {st.session_state.conversation_id}")
+            st.write(f"**MD Path:** {st.session_state.md_path}")
+            st.write(f"**Eval events found:** {len(eval_events)}")
             
-            # Debug info
-            if st.checkbox("🔍 Show Debug Info", key="eval_debug"):
-                st.write(f"**Total events:** {len(events)}")
-                st.write(f"**Conversation ID:** {st.session_state.conversation_id}")
-                st.write(f"**MD Path:** {st.session_state.md_path}")
-                st.write(f"**Eval events found:** {len(eval_events)}")
-                
-                # Show all events for debugging
-                if st.checkbox("📋 Show All Events", key="show_all_events"):
-                    for i, event in enumerate(events):
-                        st.write(f"**Event {i+1}:**")
-                        st.json(event)
-                
-                if eval_events:
-                    st.write("**Latest eval event content:**")
-                    st.json(eval_events[-1]["content"])
+            # Show all events for debugging
+            if st.checkbox("📋 Show All Events", key="show_all_events"):
+                for i, event in enumerate(conversation_events):
+                    st.write(f"**Event {i+1}:**")
+                    st.json(event)
             
             if eval_events:
-                st.success(f"📊 Found {len(eval_events)} evaluation result(s)")
-                latest_eval = eval_events[-1]["content"]
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    if "flesch_reading_ease" in latest_eval and latest_eval["flesch_reading_ease"]:
-                        score = latest_eval["flesch_reading_ease"]
-                        st.metric("Readability Score", f"{score:.1f}", 
-                                help="Flesch Reading Ease (higher = easier to read)")
-                
-                with col2:
-                    if "word_count" in latest_eval:
-                        st.metric("Word Count", latest_eval["word_count"])
-                
-                with col3:
-                    if "sentence_count" in latest_eval:
-                        st.metric("Sentences", latest_eval["sentence_count"])
-                
-                with col4:
-                    if "avg_sentence_length" in latest_eval:
-                        avg_len = latest_eval["avg_sentence_length"]
-                        st.metric("Avg Sentence Length", f"{avg_len:.1f}")
+                st.write("**Latest eval event content:**")
+                st.json(eval_events[-1]["content"])
+        
+        # Display metrics (moved outside debug section)
+        if eval_events:
+            st.success(f"📊 Found {len(eval_events)} evaluation result(s)")
+            latest_eval = eval_events[-1]["content"]
+            
+            # Display metrics in a prominent way
+            st.markdown("### 📈 Quality Metrics")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                if "flesch_reading_ease" in latest_eval and latest_eval["flesch_reading_ease"] is not None:
+                    score = latest_eval["flesch_reading_ease"]
+                    st.metric("Readability Score", f"{score:.1f}", 
+                            help="Flesch Reading Ease (higher = easier to read)")
+                else:
+                    st.metric("Readability Score", "N/A")
+            
+            with col2:
+                if "word_count" in latest_eval and latest_eval["word_count"]:
+                    st.metric("Word Count", latest_eval["word_count"])
+                else:
+                    st.metric("Word Count", "N/A")
+            
+            with col3:
+                if "sentence_count" in latest_eval and latest_eval["sentence_count"]:
+                    st.metric("Sentences", latest_eval["sentence_count"])
+                else:
+                    st.metric("Sentences", "N/A")
+            
+            with col4:
+                if "avg_sentence_length" in latest_eval and latest_eval["avg_sentence_length"]:
+                    avg_len = latest_eval["avg_sentence_length"]
+                    st.metric("Avg Sentence Length", f"{avg_len:.1f}")
+                else:
+                    st.metric("Avg Sentence Length", "N/A")
+            
+            # Show additional metrics if available
+            if latest_eval.get('flesch_kincaid_grade'):
+                st.info(f"📚 Reading Grade Level: {latest_eval['flesch_kincaid_grade']:.1f}")
+        elif eval_events_all:
+            st.warning(f"⚠️ Found {len(eval_events_all)} evaluation(s) but not for current session. Showing latest:")
+            latest_eval = eval_events_all[-1]["content"]
+            
+            # Display metrics in a prominent way
+            st.markdown("### 📈 Quality Metrics (Latest Available)")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                if "flesch_reading_ease" in latest_eval and latest_eval["flesch_reading_ease"] is not None:
+                    score = latest_eval["flesch_reading_ease"]
+                    st.metric("Readability Score", f"{score:.1f}", 
+                            help="Flesch Reading Ease (higher = easier to read)")
+            
+            with col2:
+                if "word_count" in latest_eval:
+                    st.metric("Word Count", latest_eval["word_count"])
+            
+            with col3:
+                if "sentence_count" in latest_eval:
+                    st.metric("Sentences", latest_eval["sentence_count"])
+            
+            with col4:
+                if "avg_sentence_length" in latest_eval:
+                    avg_len = latest_eval["avg_sentence_length"]
+                    st.metric("Avg Sentence Length", f"{avg_len:.1f}")
+            
+            # Show additional metrics if available
+            if latest_eval.get('flesch_kincaid_grade'):
+                st.info(f"📚 Reading Grade Level: {latest_eval['flesch_kincaid_grade']:.1f}")
+        else:
+            st.info("🔍 No evaluation results found. Click 'Analyze Quality' to run analysis.")
     
     def render_pdf_generation(self):
         """Render PDF generation section"""
@@ -891,7 +959,7 @@ class MultiAgentUI:
             self.render_pipeline_controls(repo_url)
             self.render_status_display()
             self.render_editor()
-            # self.render_evaluation_section()
+            self.render_evaluation_section()
             self.render_pdf_generation()
             self.render_error_log()
             
