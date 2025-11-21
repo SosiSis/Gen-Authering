@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import logging
 
 from utils.validation import ValidationError
+from utils.error_handling import safe_call
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +123,18 @@ class ConfigurationManager:
     def __init__(self, config_file: Optional[str] = None):
         self.config_file = config_file or ".env"
         self.config = ApplicationConfig()
-        self._load_configuration()
-        self._validate_configuration()
-        self._setup_directories()
+        try:
+            self._load_configuration()
+            self._validate_configuration()
+            self._setup_directories()
+        except ValidationError as ve:
+            logger.error("Configuration validation error: %s", ve)
+            # Re-raise so callers / tests can handle this explicitly
+            raise
+        except Exception as exc:
+            logger.exception("Failed to initialize ConfigurationManager: %s", exc)
+            # allow the exception to bubble up to the caller for deterministic handling
+            raise
     
     def _load_configuration(self):
         """Load configuration from environment and files"""
@@ -372,8 +382,15 @@ def get_config() -> ApplicationConfig:
 def initialize_config(config_file: Optional[str] = None) -> ConfigurationManager:
     """Initialize the global configuration manager"""
     global _config_manager
-    _config_manager = ConfigurationManager(config_file)
-    return _config_manager
+    try:
+        _config_manager = ConfigurationManager(config_file)
+        return _config_manager
+    except ValidationError:
+        logger.error("Configuration invalid. Please check environment variables and .env.example for required values.")
+        raise
+    except Exception:
+        logger.exception("Unexpected error initializing configuration")
+        raise
 
 
 def is_production() -> bool:

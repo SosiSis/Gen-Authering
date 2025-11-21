@@ -59,14 +59,8 @@ graph TB
 
 ### Prerequisites
 
-- Python 3.8+ 
-- Groq API Key ([Get one here](https://console.groq.com/))
-- Git (for repository cloning)
 
 ### Installation
-
-1. **Clone the repository:**
-   ```bash
    git clone https://github.com/SosiSis/Gen-Authering
    cd Gen-Authering
    ```
